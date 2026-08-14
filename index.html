@@ -99,7 +99,7 @@ header{
 
 /* KPIs */
 .kpis{
-  display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; margin-bottom:22px;
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:22px;
 }
 .kpi{
   background:var(--card); border:1px solid var(--borde); border-radius:14px;
@@ -110,6 +110,11 @@ header{
 }
 .kpi .valor{font-size:1.55rem; font-weight:800; line-height:1.1;}
 .kpi .etq{font-size:.74rem; color:var(--texto-sec); margin-top:4px; font-weight:600; text-transform:uppercase; letter-spacing:.3px;}
+.kpi .desglose{
+  margin-top:8px; padding-top:8px; border-top:1px solid var(--borde);
+  display:flex; flex-wrap:wrap; gap:2px 8px; font-size:.68rem; color:var(--texto-sec);
+}
+.kpi .desglose b{color:var(--texto); font-weight:700;}
 
 /* charts grid */
 .grid{
@@ -127,7 +132,6 @@ header{
 footer{text-align:center; color:var(--texto-sec); font-size:.75rem; padding:26px 0 0;}
 
 @media (max-width: 1100px){
-  .kpis{grid-template-columns:repeat(3, 1fr);}
   .grid{grid-template-columns:1fr;}
 }
 @media (max-width: 640px){
@@ -191,7 +195,7 @@ function aplicarTema(t){
   btnTema.textContent = t === 'dark' ? '☀️' : '🌙';
   localStorage.setItem('segurcoop-tema', t);
 }
-aplicarTema(localStorage.getItem('segurcoop-tema') || 'light');
+aplicarTema(localStorage.getItem('segurcoop-tema') || 'dark');
 btnTema.addEventListener('click', () => {
   aplicarTema(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
   Object.values(graficos).forEach(g => g && g.update());
@@ -370,6 +374,7 @@ function renderTodo(){
 
 function renderKpis(filtrados){
   const total = filtrados.length;
+  const conEncuesta = filtrados.filter(c => c.respondio === 'Responde' || c.respondio === 'Parcial').length;
   const clasificados = filtrados.filter(c => c.recomienda);
   const promotores = clasificados.filter(c => c.recomienda === 'Recomienda').length;
   const detractores = clasificados.filter(c => c.recomienda === 'No Recomienda').length;
@@ -379,19 +384,27 @@ function renderKpis(filtrados){
   const promDemora = promedio(filtrados, 'demora');
   const promPrestador = promedio(filtrados, 'prestador');
 
+  function desglose(campo){
+    const {conteo, total} = distribucion1a5(filtrados, campo);
+    if(!total) return '';
+    return `<div class="desglose">${[5,4,3,2,1].map(n => `<span><b>${n}★</b> ${Math.round(conteo[n]/total*100)}%</span>`).join('')}</div>`;
+  }
+
   const tarjetas = [
     {valor: total.toLocaleString('es-AR'), etiqueta:'Total de casos', color:'var(--rojo)'},
+    {valor: conEncuesta.toLocaleString('es-AR'), etiqueta:'Con encuesta respondida', color:'var(--rojo-2)'},
     {valor: nps === null ? '—' : nps, etiqueta:'NPS', color:'var(--violeta)'},
     {valor: pctRecomienda === null ? '—' : pctRecomienda + '%', etiqueta:'% Recomienda', color:'var(--verde)'},
-    {valor: promAtencion === null ? '—' : promAtencion.toFixed(1), etiqueta:'Prom. Atención (1-5)', color:'var(--azul)'},
-    {valor: promDemora === null ? '—' : promDemora.toFixed(1), etiqueta:'Prom. Demora (1-5)', color:'var(--dorado)'},
-    {valor: promPrestador === null ? '—' : promPrestador.toFixed(1), etiqueta:'Prom. Prestador (1-5)', color:'var(--naranja)'},
+    {valor: promAtencion === null ? '—' : promAtencion.toFixed(1), etiqueta:'Prom. Atención (1-5)', color:'var(--azul)', extra: desglose('atencion')},
+    {valor: promDemora === null ? '—' : promDemora.toFixed(1), etiqueta:'Prom. Demora (1-5)', color:'var(--dorado)', extra: desglose('demora')},
+    {valor: promPrestador === null ? '—' : promPrestador.toFixed(1), etiqueta:'Prom. Prestador (1-5)', color:'var(--naranja)', extra: desglose('prestador')},
   ];
 
   document.getElementById('kpis').innerHTML = tarjetas.map(t => `
     <div class="kpi" style="--acento:${t.color}">
       <div class="valor">${t.valor}</div>
       <div class="etq">${t.etiqueta}</div>
+      ${t.extra || ''}
     </div>
   `).join('');
 }
@@ -461,7 +474,7 @@ function renderNpsEvolucion(){
         }
       },
       scales:{
-        y:{ticks:{color:colorEjes(), callback:v=>v+''}, grid:{color:colorGrilla()}},
+        y:{beginAtZero:true, ticks:{color:colorEjes(), callback:v=>v+''}, grid:{color:colorGrilla()}},
         x:{ticks:{color:colorEjes()}, grid:{display:false}}
       }
     }
@@ -520,9 +533,10 @@ function renderDistribucion(id, filtrados, campo){
     data:{ labels, datasets:[{ data, backgroundColor:'#31819D', borderRadius:6, maxBarThickness:60 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
+      layout:{padding:{top:26}},
       plugins:{
         legend:{display:false},
-        datalabels:{anchor:'end', align:'top', color: esOscuro()?'#edeff2':'#1c1e21', font:{weight:'700'}, formatter:v=>v+'%'}
+        datalabels:{anchor:'end', align:'top', clamp:true, clip:false, color: esOscuro()?'#edeff2':'#1c1e21', font:{weight:'700'}, formatter:v=>v+'%'}
       },
       scales:{
         y:{beginAtZero:true, max:100, ticks:{color:colorEjes(), callback:v=>v+'%'}, grid:{color:colorGrilla()}},
@@ -547,9 +561,10 @@ function renderRanking(id, filtrados, campo, n){
     options:{
       indexAxis:'y',
       responsive:true, maintainAspectRatio:false,
+      layout:{padding:{right:38}},
       plugins:{
         legend:{display:false},
-        datalabels:{anchor:'end', align:'end', color: esOscuro()?'#edeff2':'#1c1e21', font:{weight:'700', size:11}, formatter:v=>v+'%'}
+        datalabels:{anchor:'end', align:'end', clamp:true, clip:false, color: esOscuro()?'#edeff2':'#1c1e21', font:{weight:'700', size:11}, formatter:v=>v+'%'}
       },
       scales:{
         x:{beginAtZero:true, max:100, ticks:{color:colorEjes(), callback:v=>v+'%'}, grid:{color:colorGrilla()}},
